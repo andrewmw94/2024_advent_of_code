@@ -1,0 +1,14 @@
+name = "aoc_day17"
+version = "0.1.0"
+defaultTargets = ["aoc_day17_p1", "aoc_day17_p2"]
+
+[[lean_lib]]
+name = "AocDay17"
+
+[[lean_exe]]
+name = "aoc_day17_p1"
+root = "P1"
+
+[[lean_exe]]
+name = "aoc_day17_p2"
+root = "P2"

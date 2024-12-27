@@ -1,0 +1,11 @@
+name = "aoc_day25"
+version = "0.1.0"
+defaultTargets = ["aoc_day25_p1"]
+
+[[lean_lib]]
+name = "AocDay25"
+
+[[lean_exe]]
+name = "aoc_day25_p1"
+root = "P1"
+

@@ -1,9 +1,19 @@
+import Std.Data.HashSet
+
 inductive Heading where
   | North
   | East
   | South
   | West
-deriving Repr, BEq
+deriving Repr, BEq, Hashable
+
+instance : LawfulBEq Heading where
+  eq_of_beq := by
+    intro a b
+    cases a <;> cases b <;> simp [BEq.beq] <;> decide
+  rfl := by
+    intro a
+    cases a <;> simp [BEq.beq] <;> decide
 
 def Heading.toStep (h : Heading) : Int × Int :=
   match h with
@@ -42,15 +52,25 @@ structure Pose where
   x : Int
   y : Int
   heading : Heading
-deriving Repr, BEq
+deriving Repr, BEq, Hashable
 
 structure State where
-  grid : Grid
   pose : Pose
   history: List Pose
+  unvisitedSet : Std.HashSet Pose
+deriving Repr
 
+def buildUnvisitedSet (width height: Nat) : Id (Std.HashSet Pose) := do
+  let mut s := Std.HashSet.empty
+  for x in [0:width] do
+    for y in [0:height] do
+      s := s.insert {x, y, heading := Heading.North}
+      s := s.insert {x, y, heading := Heading.East}
+      s := s.insert {x, y, heading := Heading.South}
+      s := s.insert {x, y, heading := Heading.West}
+  s
 
-def readState (input : String) : Id State := do
+def readState (input : String) : Id (Grid × State) := do
   let rows := input.splitOn "\n"
   -- Convert each row into an Array of characters
   let mut grid := #[]
@@ -70,41 +90,46 @@ def readState (input : String) : Id State := do
       invertedPose := {x, y, heading}
     grid := grid.push (chars.map (λ c => if c == '#' then '#' else '.')).toArray
 
+  let width := (grid.get! 0).size
+  let height := grid.size
+
   let pose := {invertedPose with y := (grid.size : Int) - invertedPose.y - 1 }
-  return {grid := {data := grid.reverse, extraObs := none}, pose, history := [pose]}
+  return ({data := grid.reverse, extraObs := none}, {pose, history := [pose], unvisitedSet := buildUnvisitedSet width height})
 
 inductive moveResults where
   | newState : State → moveResults
   | leftGrid : moveResults
   | cycle : moveResults
+deriving Inhabited, Repr
 
-def getNextState (s : State) : moveResults :=
+def getNextState (grid: Grid) (s : State) : moveResults :=
   let (dx, dy) := s.pose.heading.toStep
   let x := s.pose.x + dx
   let y := s.pose.y + dy
   let heading := s.pose.heading
-  let newCell := s.grid.getCell x y
+  let newCell := grid.getCell x y
   let newPose : Option Pose := match newCell with
     | some '.' => some {x, y, heading}
     | some '#' => some {x:=s.pose.x, y:=s.pose.y, heading:=heading.rotate}
     | _ => none
-    match newPose with
-    | some p =>
-      if s.history.contains p then
-        .cycle
-      else
-        .newState {s with pose := p, history := p :: s.history}
-    | _ => .leftGrid
+  match newPose with
+  | some p =>
+    if s.unvisitedSet.contains p then
+      .newState {s with pose := p, history := p :: s.history, unvisitedSet := s.unvisitedSet.erase p}
+    else
+      .cycle
+  | _ => .leftGrid
 
 -- Part 1 assumes the guard always leaves the grid.
 -- Lean, doesn't know this, so it can't prove termination.
--- Adding this (the knowledge that the guard always leaves on our inputs) as an assumption can be done by using `partial`.
+-- Adding this (the knowledge that the guard always leaves on our inputs) as an assumption is equivalent to using `partial`.
 -- For this version, you can comment out lines 82 and 83 above.
 --
--- We actually can prove termination if we define `getNextState` to stop once a cycle is reached
+-- We actually could prove termination if we define `getNextState` to stop once a cycle is reached
 -- To prove termination, we need to show that the number of unvisited poses decreases each iteration.
 -- `getFutureStates` returns a list of future states until we leave the grid or reach a cycle.
-partial def getFutureStates (s : State) : List State :=
-  match getNextState s with
-  | .newState s' => s' :: getFutureStates s'
+-- An equivalent proof is needed for Part 2, so I'm omitting it for Part 1.
+partial def getFutureStates (g: Grid) (s : State) : List State :=
+  match getNextState g s with
+  | .newState s' => s' :: getFutureStates g s'
   | _ => []
